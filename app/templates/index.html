@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}今日任务 - 每日任务仪表盘{% endblock %}
+
+{% block content %}
+<!-- 问候 + 日期 -->
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">
+        ☀️ 早安，HY！
+    </h1>
+    <p class="text-sm text-gray-400 mt-1">{{ today }} {{ weekday }}</p>
+</div>
+
+<!-- 添加任务表单 -->
+<div class="bg-white rounded-lg shadow-sm border border-gray-100 p-4 mb-6">
+    <form hx-post="/tasks"
+          hx-target="#task-list-container"
+          hx-swap="outerHTML"
+          class="space-y-3">
+        <div class="flex items-center gap-3">
+            <input type="text"
+                   name="title"
+                   placeholder="添加新任务..."
+                   required
+                   maxlength="200"
+                   class="flex-1 px-3 py-2 border border-gray-200 rounded-lg
+                          focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent
+                          text-sm">
+            <select name="priority"
+                    class="px-3 py-2 border border-gray-200 rounded-lg text-sm
+                           focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <option value="1">🔴 高</option>
+                <option value="2" selected>🟡 中</option>
+                <option value="3">🟢 低</option>
+            </select>
+            <button type="submit"
+                    class="px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg
+                           hover:bg-blue-600 transition cursor-pointer">
+                添加 ➕
+            </button>
+        </div>
+        <div class="flex items-center gap-3 text-sm">
+            <div class="flex items-center gap-2">
+                <span class="text-gray-400">⏱</span>
+                <input type="number"
+                       name="estimated_minutes"
+                       placeholder="预计分钟"
+                       min="1"
+                       class="w-24 px-2 py-1.5 border border-gray-200 rounded-lg text-sm
+                              focus:outline-none focus:ring-2 focus:ring-blue-400">
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-gray-400">📅</span>
+                <input type="date"
+                       name="deadline"
+                       class="px-2 py-1.5 border border-gray-200 rounded-lg text-sm
+                              focus:outline-none focus:ring-2 focus:ring-blue-400">
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- 任务列表容器（HTMX 局部刷新目标） -->
+<div id="task-list-container">
+    {% include "partials/_task_list.html" %}
+</div>
+{% endblock %}

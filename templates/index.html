@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>每日任务仪表盘</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <style>
+        .priority-high { @apply bg-red-100 text-red-700 border-red-300; }
+        .priority-mid { @apply bg-yellow-100 text-yellow-700 border-yellow-300; }
+        .priority-low { @apply bg-green-100 text-green-700 border-green-300; }
+        .task-completed { @apply line-through text-gray-400; }
+        /* HTMX 请求中动画 */
+        .htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }
+        .htmx-request .htmx-indicator { opacity: 1; }
+        .htmx-request.htmx-indicator { opacity: 1; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+    <!-- 顶部导航栏 -->
+    <header class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
+            <h1 class="text-xl font-bold text-gray-800">
+                📋 每日任务仪表盘
+            </h1>
+            <span id="today-date" class="text-sm text-gray-500"></span>
+        </div>
+    </header>
+
+    <main class="max-w-2xl mx-auto px-4 py-6">
+
+        <!-- 统计面板 -->
+        <section id="stats-panel" class="grid grid-cols-4 gap-3 mb-6">
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 text-center">
+                <p class="text-2xl font-bold text-blue-600">{{ stats.pending }}</p>
+                <p class="text-xs text-gray-500 mt-1">待办</p>
+            </div>
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 text-center">
+                <p class="text-2xl font-bold text-green-600">{{ stats.completed }}</p>
+                <p class="text-xs text-gray-500 mt-1">已完成</p>
+            </div>
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 text-center">
+                <p class="text-2xl font-bold text-gray-700">{{ stats.total }}</p>
+                <p class="text-xs text-gray-500 mt-1">总计</p>
+            </div>
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 text-center">
+                <p class="text-2xl font-bold text-orange-500">{{ stats.total_estimated_minutes }}</p>
+                <p class="text-xs text-gray-500 mt-1">预计(分)</p>
+            </div>
+        </section>
+
+        <!-- 快速添加表单 -->
+        <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+            <h2 class="text-sm font-semibold text-gray-600 mb-3">➕ 快速添加任务</h2>
+            <form
+                id="quick-add-form"
+                class="flex gap-2"
+                hx-post="/api/tasks/form"
+                hx-target="#task-list"
+                hx-swap="innerHTML"
+                hx-indicator="#add-spinner"
+                hx-on::after-request="if(event.detail.successful) this.reset()"
+            >
+                <input
+                    type="text"
+                    name="title"
+                    required
+                    placeholder="输入任务标题..."
+                    class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                    autocomplete="off"
+                >
+                <select
+                    name="priority"
+                    class="px-2 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                >
+                    <option value="2">中</option>
+                    <option value="1">高</option>
+                    <option value="3">低</option>
+                </select>
+                <button
+                    type="submit"
+                    class="px-4 py-2 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors flex items-center gap-1"
+                >
+                    <span id="add-spinner" class="htmx-indicator animate-spin">⏳</span>
+                    添加
+                </button>
+            </form>
+        </section>
+
+        <!-- 任务列表 -->
+        <section class="bg-white rounded-lg shadow-sm border border-gray-200">
+            <h2 class="text-sm font-semibold text-gray-600 p-4 border-b border-gray-100">
+                📌 今日任务
+            </h2>
+
+            <div id="task-list">
+                {% if tasks %}
+                    <ul class="divide-y divide-gray-100">
+                        {% for task in tasks %}
+                        <li
+                            id="task-{{ task.id }}"
+                            class="task-row flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                        >
+                            <!-- 复选框：仅切换"确认完成"按钮的显示/隐藏 -->
+                            <input
+                                type="checkbox"
+                                class="w-5 h-5 text-green-500 rounded border-gray-300 focus:ring-green-400 cursor-pointer"
+                                onclick="toggleConfirm({{ task.id }})"
+                            >
+
+                            <!-- 任务信息 -->
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-gray-800 truncate">
+                                    {{ task.title }}
+                                </p>
+                                <div class="flex items-center gap-2 mt-0.5">
+                                    <!-- 优先级标签 -->
+                                    <span class="text-xs px-1.5 py-0.5 rounded border
+                                        {% if task.priority == 1 %}bg-red-50 text-red-600 border-red-200
+                                        {% elif task.priority == 3 %}bg-green-50 text-green-600 border-green-200
+                                        {% else %}bg-yellow-50 text-yellow-600 border-yellow-200{% endif %}
+                                    ">
+                                        {% if task.priority == 1 %}🔴 高
+                                        {% elif task.priority == 3 %}🟢 低
+                                        {% else %}🟡 中{% endif %}
+                                    </span>
+
+                                    {% if task.estimated_minutes %}
+                                    <span class="text-xs text-gray-400">⏱ {{ task.estimated_minutes }} 分钟</span>
+                                    {% endif %}
+
+                                    {% if task.deadline %}
+                                    <span class="text-xs text-gray-400">📅 {{ task.deadline }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <!-- 确认完成按钮（默认隐藏） -->
+                            <button
+                                id="confirm-{{ task.id }}"
+                                class="hidden px-3 py-1.5 text-xs font-medium text-white bg-green-500 rounded-md hover:bg-green-600 transition-colors whitespace-nowrap"
+                                hx-patch="/api/tasks/{{ task.id }}/complete"
+                                hx-target="#task-{{ task.id }}"
+                                hx-swap="delete"
+                            >
+                                ✓ 确认完成
+                            </button>
+
+                            <!-- 删除按钮 -->
+                            <button
+                                class="text-gray-300 hover:text-red-500 transition-colors text-lg leading-none"
+                                hx-delete="/api/tasks/{{ task.id }}"
+                                hx-target="#task-{{ task.id }}"
+                                hx-swap="outerHTML"
+                                hx-confirm="确定删除「{{ task.title }}」？"
+                                title="删除任务"
+                            >×</button>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <div class="p-8 text-center text-gray-400">
+                        <p class="text-4xl mb-2">🎉</p>
+                        <p class="text-sm">今天没有待办任务，享受你的时间！</p>
+                    </div>
+                {% endif %}
+            </div>
+        </section>
+
+        <!-- 刷新按钮（手动重新加载页面） -->
+        <div class="mt-4 text-center">
+            <button
+                class="text-xs text-gray-400 hover:text-gray-600 underline"
+                hx-get="/"
+                hx-target="body"
+                hx-swap="outerHTML"
+            >
+                🔄 刷新页面
+            </button>
+        </div>
+
+    </main>
+
+    <!-- 设置今日日期 -->
+    <script>
+        const today = new Date();
+        const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' };
+        document.getElementById('today-date').textContent = today.toLocaleDateString('zh-HK', options);
+    </script>
+
+    <!-- 确认完成按钮切换 -->
+    <script>
+        function toggleConfirm(taskId) {
+            const checkbox = document.querySelector(`#task-${taskId} input[type="checkbox"]`);
+            const btn = document.getElementById(`confirm-${taskId}`);
+            if (checkbox && btn) {
+                btn.classList.toggle('hidden', !checkbox.checked);
+            }
+        }
+    </script>
+
+</body>
+</html>

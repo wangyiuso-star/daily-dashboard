@@ -1,0 +1,39 @@
+/* 自定义样式 — 补充 Tailwind 未覆盖的部分 */
+
+/* 平滑滚动 */
+html {
+    scroll-behavior: smooth;
+}
+
+/* HTMX 请求中的加载指示 */
+.htmx-request {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.htmx-request .spinner {
+    display: inline-block;
+}
+
+/* 自定义动画：任务完成时的淡入效果 */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+#task-list-container > div {
+    animation: fadeIn 0.2s ease-out;
+}
+
+/* 输入框 focus 状态微调 */
+input:focus, select:focus {
+    outline: none;
+}
+
+/* 移动端适配 */
+@media (max-width: 640px) {
+    .max-w-3xl {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+}

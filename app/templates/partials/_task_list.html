@@ -1,0 +1,123 @@
+<!-- 任务列表 + 统计（HTMX 局部刷新用） -->
+
+<!-- 进度条 -->
+<div id="stats-section" class="mb-6">
+    {% set progress = (stats.completed / stats.total * 100) | round if stats.total > 0 else 0 %}
+    <div class="flex items-center justify-between mb-2">
+        <span class="text-sm font-medium text-gray-600">
+            今日进度
+        </span>
+        <span class="text-sm font-medium text-gray-600">
+            {{ stats.completed }}/{{ stats.total }} 完成
+        </span>
+    </div>
+    <div class="w-full bg-gray-200 rounded-full h-2.5">
+        <div class="bg-blue-500 h-2.5 rounded-full transition-all duration-500"
+             style="width: {{ progress }}%"></div>
+    </div>
+</div>
+
+<!-- 待办列表 -->
+<div id="pending-tasks" class="mb-8">
+    <h2 class="text-lg font-semibold text-gray-700 mb-3">
+        📋 今日待办
+        <span class="text-sm font-normal text-gray-400">({{ stats.pending }} 项)</span>
+    </h2>
+
+    {% if tasks %}
+    <div class="space-y-2">
+        {% for task in tasks %}
+        <div class="flex items-center gap-3 bg-white rounded-lg px-4 py-3 shadow-sm border border-gray-100 hover:shadow-md transition"
+             id="task-{{ task.id }}">
+            <!-- 完成按钮 -->
+            <button hx-put="/tasks/{{ task.id }}/toggle"
+                    hx-target="#task-list-container"
+                    hx-swap="outerHTML"
+                    class="w-5 h-5 rounded-full border-2 border-gray-300
+                           hover:border-blue-500 hover:bg-blue-50
+                           flex-shrink-0 transition cursor-pointer">
+            </button>
+
+            <!-- 任务信息 -->
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                    <span class="font-medium text-gray-800 truncate">{{ task.title }}</span>
+                    {% set p = task.priority | string %}
+                    <span class="text-xs px-2 py-0.5 rounded-full font-medium
+                                 {% if p == '1' %}bg-red-100 text-red-600
+                                 {% elif p == '2' %}bg-yellow-100 text-yellow-600
+                                 {% else %}bg-green-100 text-green-600{% endif %}">
+                        {{ priority_map[p] }}
+                    </span>
+                </div>
+                <div class="flex items-center gap-3 text-xs text-gray-400 mt-1">
+                    {% if task.estimated_minutes %}
+                    <span>⏱ {{ task.estimated_minutes }}min</span>
+                    {% endif %}
+                    {% if task.deadline %}
+                    <span>📅 {{ task.deadline }}</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 删除按钮 -->
+            <button hx-delete="/tasks/{{ task.id }}"
+                    hx-target="#task-list-container"
+                    hx-swap="outerHTML"
+                    hx-confirm="确定删除「{{ task.title }}」？"
+                    class="text-gray-300 hover:text-red-500 transition flex-shrink-0 cursor-pointer"
+                    title="删除">
+                ✕
+            </button>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-12 text-gray-400">
+        <p class="text-4xl mb-3">🎉</p>
+        <p>今日没有待办任务，休息一下吧！</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- 已完成（今日完成的） -->
+{% set today_completed = namespace(count=0) %}
+{% for task in tasks if task.status == 'completed' %}
+    {% set today_completed.count = today_completed.count + 1 %}
+{% endfor %}
+
+{% if today_completed.count > 0 %}
+<div id="completed-tasks" class="mb-6">
+    <h2 class="text-lg font-semibold text-gray-700 mb-3">
+        ✅ 已完成
+        <span class="text-sm font-normal text-gray-400">({{ today_completed.count }} 项)</span>
+    </h2>
+    <div class="space-y-2 opacity-75">
+        {% for task in tasks if task.status == 'completed' %}
+        <div class="flex items-center gap-3 bg-white rounded-lg px-4 py-3 shadow-sm border border-gray-100">
+            <span class="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-white text-xs flex-shrink-0">✓</span>
+            <div class="flex-1 min-w-0">
+                <span class="text-gray-500 line-through">{{ task.title }}</span>
+                {% if task.completed_at %}
+                <span class="text-xs text-gray-400 ml-2">{{ task.completed_at.strftime('%H:%M') }}</span>
+                {% endif %}
+            </div>
+            <button hx-put="/tasks/{{ task.id }}/toggle"
+                    hx-target="#task-list-container"
+                    hx-swap="outerHTML"
+                    class="text-xs text-gray-400 hover:text-blue-500 transition cursor-pointer"
+                    title="撤销完成">
+                撤销
+            </button>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- 底部统计 -->
+<div class="text-center text-sm text-gray-400 pt-4 border-t border-gray-100">
+    ⏱ 总预计耗时: {{ stats.total_estimated_minutes }} 分钟
+    &nbsp;·&nbsp;
+    📊 完成率: {{ progress }}%
+</div>

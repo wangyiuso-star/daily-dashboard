@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}每日任务仪表盘{% endblock %}</title>
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+    <link rel="stylesheet" href="/static/css/custom.css">
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- 顶部导航 -->
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+            <a href="/" class="text-xl font-bold text-gray-800 hover:text-blue-600 transition">
+                📋 每日任务
+            </a>
+            <div class="flex items-center gap-4 text-sm">
+                <a href="/"
+                   class="{% if request.url.path == '/' %}text-blue-600 font-medium{% else %}text-gray-500 hover:text-gray-700{% endif %}">
+                    今日
+                </a>
+                <a href="/history"
+                   class="{% if request.url.path == '/history' %}text-blue-600 font-medium{% else %}text-gray-500 hover:text-gray-700{% endif %}">
+                    历史
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容 -->
+    <main class="max-w-3xl mx-auto px-4 py-6">
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

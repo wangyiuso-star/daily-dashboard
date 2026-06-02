@@ -1,0 +1,31 @@
+name: Deploy to Oracle Cloud
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH 并更新部署
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ubuntu
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd /opt/daily-dashboard
+            git pull origin main
+            source venv/bin/activate
+            pip install -r requirements.txt
+            sudo systemctl restart daily-dashboard
+            sleep 3
+            if ! systemctl is-active --quiet daily-dashboard; then
+              echo "DEPLOY FAILED: service not active"
+              sudo journalctl -u daily-dashboard -n 20 --no-pager
+              exit 1
+            fi
+            echo "DEPLOY SUCCESS"
+            sudo journalctl -u daily-dashboard -n 5 --no-pager

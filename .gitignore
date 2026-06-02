@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env
+data/*.db
+_*.py
+!_simple_bot.py
+data/backups/
