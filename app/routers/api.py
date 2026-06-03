@@ -6,7 +6,8 @@ from fastapi import APIRouter, Form, HTTPException, Query
 from fastapi.responses import JSONResponse
 from app.database import (
     complete_task, create_task, delete_task,
-    get_task_by_id, list_all_tasks, update_task,
+    get_all_task_dates, get_task_by_id, get_tasks_by_date,
+    list_all_tasks, update_task,
 )
 from app.models import TaskCreate, TaskResponse, TaskUpdate
 from app.nlp_parser import parse_task
@@ -29,6 +30,18 @@ async def api_list_tasks(status: Optional[str] = Query(default=None)):
             raise HTTPException(status_code=400, detail="status 只能是 'pending' 或 'completed'")
         tasks = [t for t in tasks if t.status == status]
     return tasks
+
+
+@router.get("/tasks/dates")
+async def api_get_task_dates():
+    """获取所有有 pending 任务的日期列表 → 200"""
+    return await get_all_task_dates()
+
+
+@router.get("/tasks/date/{target_date}", response_model=list[TaskResponse])
+async def api_get_tasks_by_date(target_date: str):
+    """获取指定日期的待办任务 → 200"""
+    return await get_tasks_by_date(target_date)
 
 
 @router.get("/tasks/{task_id}", response_model=TaskResponse)

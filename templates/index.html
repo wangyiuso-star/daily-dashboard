@@ -7,21 +7,46 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     <style>
-        .priority-high { @apply bg-red-100 text-red-700 border-red-300; }
-        .priority-mid { @apply bg-yellow-100 text-yellow-700 border-yellow-300; }
-        .priority-low { @apply bg-green-100 text-green-700 border-green-300; }
-        .task-completed { @apply line-through text-gray-400; }
-        /* HTMX 请求中动画 */
         .htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }
         .htmx-request .htmx-indicator { opacity: 1; }
         .htmx-request.htmx-indicator { opacity: 1; }
+
+        /* 日历样式 */
+        .calendar-day {
+            width: 2.25rem; height: 2.25rem;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 9999px; font-size: 0.875rem;
+            cursor: pointer; position: relative;
+            transition: background-color 150ms;
+        }
+        .calendar-day:hover { background-color: #dbeafe; }
+        .calendar-day.today {
+            background-color: #3b82f6; color: #fff; font-weight: 700;
+        }
+        .calendar-day.today:hover { background-color: #2563eb; }
+        .calendar-day.has-task::after {
+            content: '';
+            position: absolute; bottom: 2px;
+            width: 4px; height: 4px;
+            border-radius: 9999px; background-color: #fb923c;
+        }
+        .calendar-day.today.has-task::after {
+            background-color: #fff;
+        }
+        .calendar-day.selected {
+            box-shadow: 0 0 0 2px #60a5fa;
+        }
+        .calendar-day.other-month {
+            color: #d1d5db; cursor: default;
+        }
+        .calendar-day.other-month:hover { background-color: transparent; }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
 
     <!-- 顶部导航栏 -->
-    <header class="bg-white shadow-sm border-b border-gray-200">
-        <div class="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
+    <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
+        <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
             <h1 class="text-xl font-bold text-gray-800">
                 📋 每日任务仪表盘
             </h1>
@@ -29,158 +54,177 @@
         </div>
     </header>
 
-    <main class="max-w-2xl mx-auto px-4 py-6">
+    <main class="max-w-5xl mx-auto px-4 py-6 flex gap-6">
+        <!-- ======== 左侧：日历面板 ======== -->
+        <aside class="w-80 shrink-0">
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sticky top-20">
+                <div class="flex items-center justify-between mb-4">
+                    <button id="prev-month" class="text-gray-400 hover:text-gray-600 text-lg leading-none p-1" title="上月">◀</button>
+                    <h2 id="calendar-month-label" class="text-sm font-semibold text-gray-700"></h2>
+                    <button id="next-month" class="text-gray-400 hover:text-gray-600 text-lg leading-none p-1" title="下月">▶</button>
+                </div>
 
-        <!-- 统计面板 -->
-        <section id="stats-panel" class="grid grid-cols-4 gap-3 mb-6">
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 text-center">
-                <p class="text-2xl font-bold text-blue-600">{{ stats.pending }}</p>
-                <p class="text-xs text-gray-500 mt-1">待办</p>
-            </div>
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 text-center">
-                <p class="text-2xl font-bold text-green-600">{{ stats.completed }}</p>
-                <p class="text-xs text-gray-500 mt-1">已完成</p>
-            </div>
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 text-center">
-                <p class="text-2xl font-bold text-gray-700">{{ stats.total }}</p>
-                <p class="text-xs text-gray-500 mt-1">总计</p>
-            </div>
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 text-center">
-                <p class="text-2xl font-bold text-orange-500">{{ stats.total_estimated_minutes }}</p>
-                <p class="text-xs text-gray-500 mt-1">预计(分)</p>
-            </div>
-        </section>
+                <!-- 星期头 -->
+                <div class="grid grid-cols-7 gap-1 mb-2">
+                    <span class="text-center text-xs text-gray-400 py-1">日</span>
+                    <span class="text-center text-xs text-gray-400 py-1">一</span>
+                    <span class="text-center text-xs text-gray-400 py-1">二</span>
+                    <span class="text-center text-xs text-gray-400 py-1">三</span>
+                    <span class="text-center text-xs text-gray-400 py-1">四</span>
+                    <span class="text-center text-xs text-gray-400 py-1">五</span>
+                    <span class="text-center text-xs text-gray-400 py-1">六</span>
+                </div>
 
-        <!-- 快速添加表单 -->
-        <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-            <h2 class="text-sm font-semibold text-gray-600 mb-3">➕ 快速添加任务</h2>
-            <form
-                id="quick-add-form"
-                class="flex gap-2"
-                hx-post="/api/tasks/form"
-                hx-target="#task-list"
-                hx-swap="innerHTML"
-                hx-indicator="#add-spinner"
-                hx-on::after-request="if(event.detail.successful) this.reset()"
-            >
-                <input
-                    type="text"
-                    name="title"
-                    required
-                    placeholder="输入任务标题..."
-                    class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                    autocomplete="off"
+                <!-- 日期网格 -->
+                <div id="calendar-grid" class="grid grid-cols-7 gap-1"></div>
+
+                <!-- 当前选中日期信息 -->
+                <div id="selected-date-info" class="mt-3 pt-3 border-t border-gray-100 text-center">
+                    <p class="text-xs text-gray-400">点击日期查看任务</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ======== 右侧：任务面板 ======== -->
+        <section class="flex-1 min-w-0">
+            <!-- 统计面板 -->
+            <section id="stats-panel" class="grid grid-cols-4 gap-3 mb-6">
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 text-center">
+                    <p id="stat-pending" class="text-2xl font-bold text-blue-600">{{ stats.pending }}</p>
+                    <p class="text-xs text-gray-500 mt-1">待办</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 text-center">
+                    <p id="stat-completed" class="text-2xl font-bold text-green-600">{{ stats.completed }}</p>
+                    <p class="text-xs text-gray-500 mt-1">已完成</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 text-center">
+                    <p id="stat-total" class="text-2xl font-bold text-gray-700">{{ stats.total }}</p>
+                    <p class="text-xs text-gray-500 mt-1">总计</p>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-3 text-center">
+                    <p id="stat-est" class="text-2xl font-bold text-orange-500">{{ stats.total_estimated_minutes }}</p>
+                    <p class="text-xs text-gray-500 mt-1">预计(分)</p>
+                </div>
+            </section>
+
+            <!-- 快速添加表单 -->
+            <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+                <h2 class="text-sm font-semibold text-gray-600 mb-3">➕ 快速添加任务</h2>
+                <form
+                    id="quick-add-form"
+                    class="flex gap-2"
+                    hx-post="/api/tasks/form"
+                    hx-target="#task-list"
+                    hx-swap="innerHTML"
+                    hx-indicator="#add-spinner"
+                    hx-on::after-request="if(event.detail.successful) { this.reset(); reloadPage(); }"
                 >
-                <select
-                    name="priority"
-                    class="px-2 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                >
-                    <option value="2">中</option>
-                    <option value="1">高</option>
-                    <option value="3">低</option>
-                </select>
+                    <input
+                        type="text"
+                        name="title"
+                        required
+                        placeholder="输入任务标题..."
+                        class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                        autocomplete="off"
+                    >
+                    <select
+                        name="priority"
+                        class="px-2 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    >
+                        <option value="2">中</option>
+                        <option value="1">高</option>
+                        <option value="3">低</option>
+                    </select>
+                    <button
+                        type="submit"
+                        class="px-4 py-2 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors flex items-center gap-1"
+                    >
+                        <span id="add-spinner" class="htmx-indicator animate-spin">⏳</span>
+                        添加
+                    </button>
+                </form>
+            </section>
+
+            <!-- 任务列表标题 -->
+            <div class="flex items-center justify-between mb-3">
+                <h2 id="task-list-title" class="text-sm font-semibold text-gray-600">
+                    📌 今日任务
+                </h2>
                 <button
-                    type="submit"
-                    class="px-4 py-2 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors flex items-center gap-1"
+                    id="refresh-btn"
+                    class="text-xs text-gray-400 hover:text-gray-600 underline"
+                    onclick="reloadPage()"
                 >
-                    <span id="add-spinner" class="htmx-indicator animate-spin">⏳</span>
-                    添加
+                    🔄 刷新
                 </button>
-            </form>
-        </section>
-
-        <!-- 任务列表 -->
-        <section class="bg-white rounded-lg shadow-sm border border-gray-200">
-            <h2 class="text-sm font-semibold text-gray-600 p-4 border-b border-gray-100">
-                📌 今日任务
-            </h2>
-
-            <div id="task-list">
-                {% if tasks %}
-                    <ul class="divide-y divide-gray-100">
-                        {% for task in tasks %}
-                        <li
-                            id="task-{{ task.id }}"
-                            class="task-row flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
-                        >
-                            <!-- 复选框：仅切换"确认完成"按钮的显示/隐藏 -->
-                            <input
-                                type="checkbox"
-                                class="w-5 h-5 text-green-500 rounded border-gray-300 focus:ring-green-400 cursor-pointer"
-                                onclick="toggleConfirm({{ task.id }})"
-                            >
-
-                            <!-- 任务信息 -->
-                            <div class="flex-1 min-w-0">
-                                <p class="text-sm font-medium text-gray-800 truncate">
-                                    {{ task.title }}
-                                </p>
-                                <div class="flex items-center gap-2 mt-0.5">
-                                    <!-- 优先级标签 -->
-                                    <span class="text-xs px-1.5 py-0.5 rounded border
-                                        {% if task.priority == 1 %}bg-red-50 text-red-600 border-red-200
-                                        {% elif task.priority == 3 %}bg-green-50 text-green-600 border-green-200
-                                        {% else %}bg-yellow-50 text-yellow-600 border-yellow-200{% endif %}
-                                    ">
-                                        {% if task.priority == 1 %}🔴 高
-                                        {% elif task.priority == 3 %}🟢 低
-                                        {% else %}🟡 中{% endif %}
-                                    </span>
-
-                                    {% if task.estimated_minutes %}
-                                    <span class="text-xs text-gray-400">⏱ {{ task.estimated_minutes }} 分钟</span>
-                                    {% endif %}
-
-                                    {% if task.deadline %}
-                                    <span class="text-xs text-gray-400">📅 {{ task.deadline }}</span>
-                                    {% endif %}
-                                </div>
-                            </div>
-
-                            <!-- 确认完成按钮（默认隐藏） -->
-                            <button
-                                id="confirm-{{ task.id }}"
-                                class="hidden px-3 py-1.5 text-xs font-medium text-white bg-green-500 rounded-md hover:bg-green-600 transition-colors whitespace-nowrap"
-                                hx-patch="/api/tasks/{{ task.id }}/complete"
-                                hx-target="#task-{{ task.id }}"
-                                hx-swap="delete"
-                            >
-                                ✓ 确认完成
-                            </button>
-
-                            <!-- 删除按钮 -->
-                            <button
-                                class="text-gray-300 hover:text-red-500 transition-colors text-lg leading-none"
-                                hx-delete="/api/tasks/{{ task.id }}"
-                                hx-target="#task-{{ task.id }}"
-                                hx-swap="outerHTML"
-                                hx-confirm="确定删除「{{ task.title }}」？"
-                                title="删除任务"
-                            >×</button>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                {% else %}
-                    <div class="p-8 text-center text-gray-400">
-                        <p class="text-4xl mb-2">🎉</p>
-                        <p class="text-sm">今天没有待办任务，享受你的时间！</p>
-                    </div>
-                {% endif %}
             </div>
+
+            <!-- 任务列表 -->
+            <section class="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div id="task-list">
+                    {% if tasks %}
+                        <ul class="divide-y divide-gray-100">
+                            {% for task in tasks %}
+                            <li
+                                id="task-{{ task.id }}"
+                                class="task-row flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                            >
+                                <input
+                                    type="checkbox"
+                                    class="w-5 h-5 text-green-500 rounded border-gray-300 focus:ring-green-400 cursor-pointer"
+                                    onclick="toggleConfirm({{ task.id }})"
+                                >
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-medium text-gray-800 truncate">
+                                        {{ task.title }}
+                                    </p>
+                                    <div class="flex items-center gap-2 mt-0.5">
+                                        <span class="text-xs px-1.5 py-0.5 rounded border
+                                            {% if task.priority == 1 %}bg-red-50 text-red-600 border-red-200
+                                            {% elif task.priority == 3 %}bg-green-50 text-green-600 border-green-200
+                                            {% else %}bg-yellow-50 text-yellow-600 border-yellow-200{% endif %}
+                                        ">
+                                            {% if task.priority == 1 %}🔴 高
+                                            {% elif task.priority == 3 %}🟢 低
+                                            {% else %}🟡 中{% endif %}
+                                        </span>
+                                        {% if task.estimated_minutes %}
+                                        <span class="text-xs text-gray-400">⏱ {{ task.estimated_minutes }} 分钟</span>
+                                        {% endif %}
+                                        {% if task.deadline %}
+                                        <span class="text-xs text-gray-400">📅 {{ task.deadline }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <button
+                                    id="confirm-{{ task.id }}"
+                                    class="hidden px-3 py-1.5 text-xs font-medium text-white bg-green-500 rounded-md hover:bg-green-600 transition-colors whitespace-nowrap"
+                                    hx-patch="/api/tasks/{{ task.id }}/complete"
+                                    hx-target="#task-{{ task.id }}"
+                                    hx-swap="delete"
+                                >
+                                    ✓ 确认完成
+                                </button>
+                                <button
+                                    class="text-gray-300 hover:text-red-500 transition-colors text-lg leading-none"
+                                    hx-delete="/api/tasks/{{ task.id }}"
+                                    hx-target="#task-{{ task.id }}"
+                                    hx-swap="outerHTML"
+                                    hx-confirm="确定删除「{{ task.title }}」？"
+                                    title="删除任务"
+                                >×</button>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <div class="p-8 text-center text-gray-400">
+                            <p class="text-4xl mb-2">🎉</p>
+                            <p class="text-sm">今天没有待办任务，享受你的时间！</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </section>
         </section>
-
-        <!-- 刷新按钮（手动重新加载页面） -->
-        <div class="mt-4 text-center">
-            <button
-                class="text-xs text-gray-400 hover:text-gray-600 underline"
-                hx-get="/"
-                hx-target="body"
-                hx-swap="outerHTML"
-            >
-                🔄 刷新页面
-            </button>
-        </div>
-
     </main>
 
     <!-- 设置今日日期 -->
@@ -188,10 +232,247 @@
         const today = new Date();
         const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' };
         document.getElementById('today-date').textContent = today.toLocaleDateString('zh-HK', options);
-    </script>
 
-    <!-- 确认完成按钮切换 -->
-    <script>
+        // ==================== 日历逻辑 ====================
+
+        // 从后端传入的有任务日期列表
+        const taskDates = new Set({{ task_dates | tojson }});
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        // 状态
+        let currentYear = today.getFullYear();
+        let currentMonth = today.getMonth(); // 0-11
+        let selectedDate = todayStr; // 当前选中的日期
+
+        const gridEl = document.getElementById('calendar-grid');
+        const monthLabelEl = document.getElementById('calendar-month-label');
+        const selectedInfoEl = document.getElementById('selected-date-info');
+        const taskListEl = document.getElementById('task-list');
+        const taskListTitleEl = document.getElementById('task-list-title');
+
+        /** 格式化日期为 YYYY-MM-DD */
+        function fmtDate(y, m, d) {
+            return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        }
+
+        /** 格式化日期为中文显示 */
+        function fmtDisplay(dateStr) {
+            const d = new Date(dateStr + 'T00:00:00');
+            const opts = { month: 'long', day: 'numeric', weekday: 'short' };
+            return d.toLocaleDateString('zh-HK', opts);
+        }
+
+        /** 判断是今天 */
+        function isToday(dateStr) {
+            return dateStr === todayStr;
+        }
+
+        /** 判断是否为选中日期 */
+        function isSelected(dateStr) {
+            return dateStr === selectedDate;
+        }
+
+        /** 判断日期是否有任务 */
+        function hasTask(dateStr) {
+            return taskDates.has(dateStr);
+        }
+
+        /** 渲染日历 */
+        function renderCalendar() {
+            const year = currentYear;
+            const month = currentMonth;
+
+            monthLabelEl.textContent = `${year} 年 ${month + 1} 月`;
+
+            gridEl.innerHTML = '';
+
+            // 当月第一天是周几 (0=日, 6=六)
+            const firstDay = new Date(year, month, 1).getDay();
+            // 当月有多少天
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            // 上月有多少天
+            const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+            // 填充空格 + 上月末尾日期
+            for (let i = 0; i < firstDay; i++) {
+                const day = daysInPrevMonth - firstDay + i + 1;
+                const div = document.createElement('div');
+                div.className = 'calendar-day other-month';
+                div.textContent = day;
+                gridEl.appendChild(div);
+            }
+
+            // 当月日期
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dateStr = fmtDate(year, month, d);
+                const div = document.createElement('div');
+                div.className = 'calendar-day';
+                div.textContent = d;
+                div.dataset.date = dateStr;
+
+                if (isToday(dateStr)) {
+                    div.classList.add('today');
+                }
+                if (isSelected(dateStr)) {
+                    div.classList.add('selected');
+                }
+                if (hasTask(dateStr)) {
+                    div.classList.add('has-task');
+                }
+
+                div.addEventListener('click', () => selectDate(dateStr));
+                gridEl.appendChild(div);
+            }
+        }
+
+        /** 选中日期并加载任务 */
+        async function selectDate(dateStr) {
+            selectedDate = dateStr;
+            renderCalendar();
+
+            // 更新选中日期信息
+            selectedInfoEl.innerHTML = `
+                <p class="text-sm text-gray-700 font-medium">${fmtDisplay(dateStr)}</p>
+                ${isToday(dateStr) ? '<p class="text-xs text-blue-500">今天</p>' : ''}
+                ${hasTask(dateStr) ? '<p class="text-xs text-orange-400">有任务</p>' : '<p class="text-xs text-gray-300">暂无任务</p>'}
+            `;
+
+            // 更新标题
+            taskListTitleEl.textContent = isToday(dateStr)
+                ? '📌 今日任务'
+                : `📅 ${fmtDisplay(dateStr)} 的任务`;
+
+            // 加载该日期的任务
+            await loadTasksForDate(dateStr);
+        }
+
+        /** 从 API 加载指定日期的任务 */
+        async function loadTasksForDate(dateStr) {
+            try {
+                const resp = await fetch(`/api/tasks/date/${dateStr}`);
+                if (!resp.ok) throw new Error('加载失败');
+                const tasks = await resp.json();
+                renderTaskList(tasks);
+            } catch (err) {
+                taskListEl.innerHTML = `
+                    <div class="p-8 text-center text-gray-400">
+                        <p class="text-sm">加载失败，请重试</p>
+                    </div>
+                `;
+            }
+        }
+
+        /** 渲染任务列表 HTML */
+        function renderTaskList(tasks) {
+            if (!tasks || tasks.length === 0) {
+                taskListEl.innerHTML = `
+                    <div class="p-8 text-center text-gray-400">
+                        <p class="text-4xl mb-2">🎉</p>
+                        <p class="text-sm">这天没有待办任务！</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const priorityClasses = {
+                1: 'bg-red-50 text-red-600 border-red-200',
+                2: 'bg-yellow-50 text-yellow-600 border-yellow-200',
+                3: 'bg-green-50 text-green-600 border-green-200',
+            };
+            const priorityEmoji = { 1: '🔴 高', 2: '🟡 中', 3: '🟢 低' };
+
+            let html = '<ul class="divide-y divide-gray-100">';
+            for (const task of tasks) {
+                html += `
+                <li id="task-${task.id}" class="task-row flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
+                    <input
+                        type="checkbox"
+                        class="w-5 h-5 text-green-500 rounded border-gray-300 focus:ring-green-400 cursor-pointer"
+                        onclick="toggleConfirm(${task.id})"
+                    >
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-gray-800 truncate">${escapeHtml(task.title)}</p>
+                        <div class="flex items-center gap-2 mt-0.5">
+                            <span class="text-xs px-1.5 py-0.5 rounded border ${priorityClasses[task.priority] || ''}">
+                                ${priorityEmoji[task.priority] || '?'}
+                            </span>
+                            ${task.estimated_minutes ? `<span class="text-xs text-gray-400">⏱ ${task.estimated_minutes} 分钟</span>` : ''}
+                            ${task.deadline ? `<span class="text-xs text-gray-400">📅 ${task.deadline}</span>` : ''}
+                        </div>
+                    </div>
+                    <button
+                        id="confirm-${task.id}"
+                        class="hidden px-3 py-1.5 text-xs font-medium text-white bg-green-500 rounded-md hover:bg-green-600 transition-colors whitespace-nowrap"
+                        hx-patch="/api/tasks/${task.id}/complete"
+                        hx-target="#task-${task.id}"
+                        hx-swap="delete"
+                    >
+                        ✓ 确认完成
+                    </button>
+                    <button
+                        class="text-gray-300 hover:text-red-500 transition-colors text-lg leading-none"
+                        hx-delete="/api/tasks/${task.id}"
+                        hx-target="#task-${task.id}"
+                        hx-swap="outerHTML"
+                        hx-confirm="确定删除「${escapeHtml(task.title)}」？"
+                        title="删除任务"
+                    >×</button>
+                </li>`;
+            }
+            html += '</ul>';
+
+            taskListEl.innerHTML = html;
+
+            // 为新插入的 HTMX 元素初始化 HTMX
+            htmx.process(taskListEl);
+        }
+
+        /** HTML 转义 */
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        /** 重新加载当前页面 */
+        function reloadPage() {
+            location.reload();
+        }
+
+        // 月份切换
+        document.getElementById('prev-month').addEventListener('click', () => {
+            if (currentMonth === 0) {
+                currentMonth = 11;
+                currentYear--;
+            } else {
+                currentMonth--;
+            }
+            renderCalendar();
+        });
+
+        document.getElementById('next-month').addEventListener('click', () => {
+            if (currentMonth === 11) {
+                currentMonth = 0;
+                currentYear++;
+            } else {
+                currentMonth++;
+            }
+            // 不能超过当前月份太多（限制未来3个月）
+            const maxDate = new Date();
+            maxDate.setMonth(maxDate.getMonth() + 3);
+            if (new Date(currentYear, currentMonth) > maxDate) {
+                // 回退
+                if (currentMonth === 0) {
+                    currentMonth = 11;
+                    currentYear--;
+                } else {
+                    currentMonth--;
+                }
+            }
+            renderCalendar();
+        });
+
+        // ==================== 确认完成按钮切换 ====================
         function toggleConfirm(taskId) {
             const checkbox = document.querySelector(`#task-${taskId} input[type="checkbox"]`);
             const btn = document.getElementById(`confirm-${taskId}`);
@@ -199,7 +480,9 @@
                 btn.classList.toggle('hidden', !checkbox.checked);
             }
         }
-    </script>
 
+        // ==================== 初始化 ====================
+        renderCalendar();
+    </script>
 </body>
 </html>

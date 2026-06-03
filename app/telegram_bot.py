@@ -27,7 +27,7 @@ from telegram.ext import (
 from telegram.request import HTTPXRequest
 
 from app.database import complete_task, create_task, get_task_by_id, list_today_tasks
-from app.nlp_parser import parse_task
+from app.nlp_parser import parse_tasks
 
 # 配置 logging 输出到 stdout
 logging.basicConfig(
@@ -222,21 +222,45 @@ async def _cmd_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = update.message.text.strip()
-    print(f"[Telegram Bot] 📩 收到消息来自 @{update.effective_user.username}: {text[:50]}", flush=True)
+    print(f"[Telegram Bot] 📩 收到消息来自 @{update.effective_user.username}: {text[:80]}", flush=True)
 
     try:
-        task_data = await parse_task(text)
-        task = await create_task(task_data)
+        tasks_data = await parse_tasks(text)
     except Exception:
-        logger.exception("解析或创建任务失败")
-        await update.message.reply_text("❌ 无法解析，请重新描述。")
+        logger.exception("解析任务失败")
+        await update.message.reply_text("❌ 无法解析消息，请重新描述。")
         return
 
-    pl = PRIORITY_LABEL.get(task.priority, "?")
-    dl = f"{task.deadline}" if task.deadline else "无截止日期"
-    await update.message.reply_text(
-        f"✅ 已添加任务：【{task.title}】，优先级：【{pl}】，截止日期：【{dl}】"
-    )
+    if not tasks_data:
+        await update.message.reply_text("❌ 未能从消息中识别出任务。")
+        return
+
+    created_tasks = []
+    for task_data in tasks_data:
+        try:
+            task = await create_task(task_data)
+            created_tasks.append(task)
+        except Exception:
+            logger.exception(f"创建任务失败: {task_data.title}")
+
+    if not created_tasks:
+        await update.message.reply_text("❌ 创建任务失败，请稍后重试。")
+        return
+
+    if len(created_tasks) == 1:
+        task = created_tasks[0]
+        pl = PRIORITY_LABEL.get(task.priority, "?")
+        dl = f"{task.deadline}" if task.deadline else "无截止日期"
+        await update.message.reply_text(
+            f"✅ 已添加任务：【{task.title}】，优先级：【{pl}】，截止日期：【{dl}】"
+        )
+    else:
+        lines = [f"✅ 已添加 {len(created_tasks)} 条任务：\n"]
+        for task in created_tasks:
+            pl = PRIORITY_LABEL.get(task.priority, "?")
+            dl = f"📅 {task.deadline}" if task.deadline else "无截止日期"
+            lines.append(f"  • #{task.id} {task.title} [{pl}] {dl}")
+        await update.message.reply_text("\n".join(lines))
 
 
 # ---------- 生命周期管理 ----------

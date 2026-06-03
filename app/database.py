@@ -168,6 +168,47 @@ async def get_task_by_id(task_id: int) -> Optional[TaskResponse]:
         return _row_to_task(row) if row else None
 
 
+async def get_tasks_by_date(target_date: str) -> list[TaskResponse]:
+    """获取指定日期的待办任务。
+
+    Args:
+        target_date: ISO 格式日期字符串 (YYYY-MM-DD)。
+
+    Returns:
+        该日期 deadline 的所有 pending 任务列表。
+    """
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        db.row_factory = sqlite3.Row
+        cursor = await db.execute(
+            """SELECT * FROM tasks
+               WHERE status = 'pending'
+                 AND deadline = ?
+               ORDER BY
+                 priority ASC,
+                 estimated_minutes ASC""",
+            (target_date,),
+        )
+        rows = await cursor.fetchall()
+        return [_row_to_task(r) for r in rows]
+
+
+async def get_all_task_dates() -> list[str]:
+    """获取所有有 pending 任务的日期列表。
+
+    Returns:
+        去重后的日期字符串列表 (YYYY-MM-DD)，按日期升序排列。
+    """
+    async with aiosqlite.connect(str(DB_PATH)) as db:
+        cursor = await db.execute(
+            """SELECT DISTINCT deadline FROM tasks
+               WHERE status = 'pending'
+                 AND deadline IS NOT NULL
+               ORDER BY deadline ASC"""
+        )
+        rows = await cursor.fetchall()
+        return [r[0] for r in rows]
+
+
 async def get_daily_stats() -> dict:
     """获取今日统计信息。"""
     today = date.today().isoformat()

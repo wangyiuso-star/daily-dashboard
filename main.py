@@ -17,7 +17,7 @@ from fastapi.templating import Jinja2Templates
 # 此时 load_dotenv() 静默返回 False，不影响服务运行。
 load_dotenv(override=False)
 
-from app.database import init_db, list_today_tasks, get_daily_stats
+from app.database import init_db, list_today_tasks, get_daily_stats, get_all_task_dates
 from app.routers.api import router as api_router
 from app.telegram_bot import start_bot, stop_bot
 
@@ -51,9 +51,15 @@ async def index(request: Request):
     """今日仪表盘主页。"""
     tasks = await list_today_tasks()
     stats = await get_daily_stats()
+    task_dates = await get_all_task_dates()
     return templates.TemplateResponse(
         "index.html",
-        {"request": request, "tasks": tasks, "stats": stats},
+        {
+            "request": request,
+            "tasks": tasks,
+            "stats": stats,
+            "task_dates": task_dates,
+        },
     )
 
 
